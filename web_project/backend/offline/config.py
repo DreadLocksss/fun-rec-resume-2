@@ -23,14 +23,14 @@ class Config:
     
     # 训练配置
     BATCH_SIZE = 128
-    EPOCHS = 3
+    EPOCHS = 10
     LEARNING_RATE = 0.001
     
     # 模型部署目录（用于在线服务加载模型）
     DEPLOY_DIR = TEMP_DIR / "deployed_models"
     DEPLOY_DIR.mkdir(parents=True, exist_ok=True)
     
-    REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0") 
     
     # 特征存储键名
     USER_PROFILE_PREFIX = "user:{}:profile"

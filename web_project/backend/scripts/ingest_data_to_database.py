@@ -54,6 +54,37 @@ def load_metadata(file_path: str) -> Dict[str, pd.DataFrame]:
     return metadata
 
 
+def resolve_data_dir(args_data_dir: str | None) -> Path:
+    """解析可用的数据目录，优先选择实际存在且包含数据文件的目录。"""
+    candidates = []
+
+    if args_data_dir:
+        candidates.append(Path(args_data_dir))
+
+    settings_data_dir = Path(settings.data_dir)
+    if settings_data_dir not in candidates:
+        candidates.append(settings_data_dir)
+
+    env_data_dir = os.getenv("FUNREC_RAW_DATA_PATH")
+    if env_data_dir:
+        env_path = Path(env_data_dir)
+        if env_path not in candidates:
+            candidates.append(env_path)
+
+    required_files = ["movies.pkl", "users.pkl", "ratings.pkl", "movie_metadata.pkl"]
+
+    for candidate in candidates:
+        if candidate.exists() and all((candidate / filename).exists() for filename in required_files):
+            return candidate
+
+    checked_paths = "\n".join(f"- {candidate}" for candidate in candidates) if candidates else "- <none>"
+    raise FileNotFoundError(
+        "找不到可用的数据目录。已检查以下路径:\n"
+        f"{checked_paths}\n"
+        "请确认数据目录已挂载到容器内的 /data，或者通过 --data-dir 显式指定。"
+    )
+
+
 def ingest_title_ratings(db: Session, df_title_ratings: pd.DataFrame):
     """导入 IMDb 电影评分"""
     print("\n=== 导入 IMDb 电影评分 ===")
@@ -502,13 +533,8 @@ def main():
     
     args = parser.parse_args()
     
-    # 数据目录 - 使用正确的路径
-    if args.data_dir:
-        data_dir = Path(args.data_dir)
-    elif os.getenv("FUNREC_RAW_DATA_PATH"):
-        data_dir = Path(os.getenv("FUNREC_RAW_DATA_PATH"))
-    else:
-        data_dir = Path(settings.data_dir)
+    # 数据目录 - 优先使用实际存在且包含数据文件的路径
+    data_dir = resolve_data_dir(args.data_dir)
     
     print("=" * 60)
     print("MovieLens + IMDb 数据导入")

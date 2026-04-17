@@ -20,6 +20,7 @@ launch-api:
 run-offline-pipeline:
 	# 运行离线流水线
 	uv run python -m offline.pipeline --steps all --flush-redis
+# 	uv run python -m offline.pipeline --steps retrieval_preprocess --flush-redis
 
 ingest-to-redis:
 	# 将数据导入 Redis

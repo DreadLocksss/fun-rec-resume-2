@@ -27,49 +27,57 @@ def load_raw_data():
         print(f"数据文件不存在: {config.DATASET_DIR}")
         sys.exit(1)
 
+
 def process_features(df_movies, df_ratings, df_users):
     """
     处理特征
     
     Returns:
         df_merged: 合并后的特征 DataFrame
+            schema: ["user_id", "gender", "age", "occupation", "zip_code", "movie_id", "genres", "isAdult", "startYear", "rating", "timestamp", "user_avg_rating", "conversion", "click", "exposure"]
         user_vocab: 用户特征词表
         movie_vocab: 电影特征词表
         df_users: 处理后的用户 DataFrame
         df_movies: 处理后的电影 DataFrame
     """
-    print("提取特征...")
+    # 1. 选择特征
+    print("选择特征...")
     
-    # 选择列
+    # 选择需要提取的列
     user_columns = ["user_id", "gender", "age", "occupation", "zip_code"]
     movie_columns = ["movie_id", "originalTitle", "description", "genres", "isAdult", "startYear", "runtimeMinutes", "averageRating", "numVotes"]
     ratings_columns = ["user_id", "movie_id", "rating", "timestamp"]
 
+    # 提取需要的列并进行初步处理
+    # 数据类型为 pandas 的 DataFrame，使用列选择和重命名来处理特征
     df_users = df_users[user_columns]
     df_movies = df_movies[movie_columns].rename(columns={"originalTitle": "title"})
     df_movies['genres'] = df_movies['genres'].str.split("|")
     df_movies['runtimeMinutes'] = df_movies['runtimeMinutes'].replace('\\N', float('nan'))
     df_ratings = df_ratings[ratings_columns]
 
-    # 2. 特征提取
-    print("提取特征...")
+    # 2. 特征编码
+    print("特征编码...")
 
-    # 稀疏特征编码
+    # 用户特征编码
     user_sparse_feature_columns = ["user_id", "gender", "age", "occupation", "zip_code"]
     new_user_feature_df = df_users[user_sparse_feature_columns].copy()
 
     user_vocab = {}
     for feat_name in user_sparse_feature_columns:
         label_encoder = LabelEncoder()
+
+        # fit_transform 先学习类别映射，再立刻把输入编码
         new_user_feature_df[feat_name + "_encode"] = (
             label_encoder.fit_transform(new_user_feature_df[feat_name]) + 1  # 0 用于未知
         )
-        if feat_name != "user_id":
+        if feat_name != "user_id": # 这里不删除 user_id 列，因为后续生成样本时需要用到原始 ID 进行 merge
             new_user_feature_df[feat_name] = new_user_feature_df[feat_name + "_encode"]
             del new_user_feature_df[feat_name + "_encode"]
-        user_vocab[feat_name] = label_encoder.classes_
+        user_vocab[feat_name] = label_encoder.classes_ # classes_ 本质就是这个特征的“原始取值全集”，同时决定了类别到整数的映射顺序
 
-    movie_encode_feature_columns = ["movie_id", "genres", "isAdult","startYear"]
+    # 电影特征编码
+    movie_encode_feature_columns = ["movie_id", "genres", "isAdult", "startYear"]
     new_movie_sparse_feature_df = df_movies[movie_encode_feature_columns].copy()
     new_movie_sparse_feature_df["isAdult"] = new_movie_sparse_feature_df["isAdult"].fillna(False)
 
@@ -77,13 +85,15 @@ def process_features(df_movies, df_ratings, df_users):
     for feat_name in movie_encode_feature_columns:
         label_encoder = LabelEncoder()
         # explode 展开列表（类型字段）以进行拟合
-        label_encoder.fit(new_movie_sparse_feature_df[feat_name].explode()) 
+        label_encoder.fit(new_movie_sparse_feature_df[feat_name].explode()) # 如果这一列某些行是列表（例如 genres 里一行是 [Action, Comedy]），会展开成两行：Action 和 Comedy
+
+        # transform 是基于已学好的 classes_ 去编码
         if feat_name == "genres":
             new_movie_sparse_feature_df[feat_name + "_encode"] = new_movie_sparse_feature_df[feat_name].apply(lambda x: label_encoder.transform(x) + 1)
         else:
             new_movie_sparse_feature_df[feat_name + "_encode"] = label_encoder.transform(new_movie_sparse_feature_df[feat_name]) + 1
         
-        if feat_name != "movie_id":
+        if feat_name != "movie_id": # 这里不删除 movie_id 列，因为后续生成样本时需要用到原始 ID 进行 merge
             new_movie_sparse_feature_df[feat_name] = new_movie_sparse_feature_df[feat_name + "_encode"]
             del new_movie_sparse_feature_df[feat_name + "_encode"]
         movie_vocab[feat_name] = label_encoder.classes_
@@ -91,12 +101,16 @@ def process_features(df_movies, df_ratings, df_users):
     new_movie_feature_df = new_movie_sparse_feature_df
 
     # 评分特征
+    # groupby("user_id")["rating"].mean() 结果是一个 Series，索引是 user_id，值是该用户平均分
+    # reset_index() 把上一步的索引 user_id 变回普通列，结果变成 DataFrame，列大概是 user_id 和 rating
     new_ratings_feature_df = df_ratings.merge(
         df_ratings.groupby("user_id")['rating'].mean().reset_index().rename(columns={"rating": "user_avg_rating"}), 
         on="user_id"
     )
+
     # 转化/点击掩码（此处召回模型不严格使用，但保留以保持一致性）
     # 计算转化、点击、曝光
+    # TODO 这里有怪处理
     conversion_mask = new_ratings_feature_df['rating'] >= new_ratings_feature_df['user_avg_rating']
     click_mask = new_ratings_feature_df['rating'] >= new_ratings_feature_df['user_avg_rating'] - 1
     exposure_mask = np.ones(len(new_ratings_feature_df), dtype=bool)
@@ -125,8 +139,14 @@ def process_features(df_movies, df_ratings, df_users):
     return df_merged, user_vocab, movie_vocab, df_users, df_movies
 
 
+# TODO 对于 genres 的处理有问题
+# TODO 不清楚后续线上 serving 的输入，往前截断和在前 padding 的方法有待商榷
 def add_padding(val, padding_value, max_seq_len):
-    """为序列添加填充以达到固定长度"""
+    """
+    为序列添加填充以达到固定长度
+    如果超过最大长度，则截断为 max_seq_len
+    如果小于最大长度，则在前面添加 padding_value 进行填充
+    """
     if isinstance(val, (list, tuple, np.ndarray)):
         if len(val) > 0 and isinstance(val[0], (list, tuple, np.ndarray)):        
             val = list(itertools.chain(*val))[:max_seq_len]
@@ -135,6 +155,7 @@ def add_padding(val, padding_value, max_seq_len):
         return [padding_value] * (max_seq_len - len(val)) + val
     else:
         return val
+
 
 def generate_train_eval_samples(
         data_df, user_columns, item_columns, max_hist_seq_len=10, max_feat_seq_len=10, padding_value=0
@@ -157,7 +178,8 @@ def generate_train_eval_samples(
     Returns:
         包含 train 和 test 数据的字典
     """
-    data_df.sort_values("timestamp", inplace=True)
+    # 按照 timestamp 排序，确保历史序列的正确顺序
+    data_df.sort_values("timestamp", inplace=True) # inplace=True 指参数表示直接在原 DataFrame 上进行排序，而不是返回一个新的排序后的 DataFrame
     train_data_dict = defaultdict(list)
     test_data_dict = defaultdict(list)
     
@@ -170,7 +192,7 @@ def generate_train_eval_samples(
         # 测试集用户特征
         test_data_dict["user_id"].append(user_id)
         for col in user_columns:
-            test_data_dict[col].append(grouped_feats[col].iloc[0])
+            test_data_dict[col].append(grouped_feats[col].iloc[0]) # 用户特征在整个序列中保持不变，取第一个即可
         
         len_hist_seq = len(grouped_feats["movie_id"])
         
@@ -180,6 +202,8 @@ def generate_train_eval_samples(
             test_data_dict[col].append(add_padding(grouped_feats[col].tolist()[-1], padding_value, max_feat_seq_len))
 
         # --- 训练数据（滑动窗口）---
+        # TODO 如果 add_padding 是往前截断的，那么这个滑动窗口是错的
+        # TODO 对于 genres 的特征直接摊平有点抽象
         for i in range(1, len_hist_seq - 1):
             # 修复：为每个训练样本添加用户特征
             train_data_dict["user_id"].append(user_id)
@@ -196,7 +220,8 @@ def generate_train_eval_samples(
     final_train = {}
     for k, v in train_data_dict.items():
         final_train[k] = np.array(v)
-        
+
+    print(final_train["hist_movie_id"][:10])        
     final_test = {}
     for k, v in test_data_dict.items():
         final_test[k] = np.array(v)
@@ -222,7 +247,7 @@ def run_retrieval_preprocessing():
     print("保存处理后的数据...")
     pickle.dump(samples, open(config.TRAIN_DATA_PATH, "wb"))
     
-    vocab_dict = {**user_vocab, **movie_vocab}
+    vocab_dict = {**user_vocab, **movie_vocab} # 字典解包合并
     pickle.dump(vocab_dict, open(config.VOCAB_DICT_PATH, "wb"))
     
     # 模型配置的特征字典（词表大小 + 1 用于填充）
