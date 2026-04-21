@@ -23,7 +23,7 @@ class Config:
     
     # 训练配置
     BATCH_SIZE = 128
-    EPOCHS = 10
+    EPOCHS = 1
     LEARNING_RATE = 0.001
     
     # 模型部署目录（用于在线服务加载模型）

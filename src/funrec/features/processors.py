@@ -84,6 +84,7 @@ def apply_training_preprocessing(
     processed_labels = train_labels
 
     # 如果指定，采样训练数据
+    # YoutubeDNN 没有指定
     subsample_size = training_config.get("subsample_size")
     if subsample_size is not None and subsample_size > 0:
         # 获取第一个特征的采样数量
@@ -103,6 +104,7 @@ def apply_training_preprocessing(
             else:
                 processed_labels = processed_labels[:subsample_size]
 
+    # YoutubeDNN 为 [{"type": "positive_sampling_labels"}]
     preprocessing_rules = training_config.get("data_preprocessing", [])
     if not preprocessing_rules:
         return processed_features, processed_labels
@@ -112,7 +114,9 @@ def apply_training_preprocessing(
 
         if rule_type == "positive_sampling_labels":
             # 将标签转换为全1，用于模型（YouTubeDNN, SDM, etc.）
+            # 在 train_eval_samples 中随便找一个 feat 对应的 column 的长度来创建全1标签
             processed_labels = np.ones_like(list(processed_features.values())[0])
+            # YoutubeDNN 没有指定
         elif rule_type == "eges_generate_walk_pairs":
             # 构建EGES训练对，通过随机游走
             num_walks = int(rule.get("num_walks", 10))
@@ -233,6 +237,7 @@ def prepare_features(
     """
 
     # 如果未定义特征，使用数据集配置中的特征字典
+    # YoutubeDNN 没有用到
     if not features_config or not features_config.get("features"):
         feature_dict = None
         dataset_name = features_config.get("dataset_name") if features_config else None
@@ -248,6 +253,7 @@ def prepare_features(
         return [], processed
 
     # 可选采样，用来加速特征准备
+    # YoutubeDNN 没有用到
     def _early_subsample(data: Dict[str, Any], size: int) -> Dict[str, Any]:
         if not data or size is None or size <= 0:
             return data
@@ -279,6 +285,7 @@ def prepare_features(
         test_data = _early_subsample(test_data, int(pre_sub_test))
 
     # 获取数据信息
+    # YoutubeDNN 没有用到
     dataset_name = features_config.get("dataset_name")
     if not dataset_name:
         raise ValueError("dataset_name must be specified in features config")
@@ -286,24 +293,30 @@ def prepare_features(
     if (dataset_config is None) and (dataset_name not in DATASET_CONFIG):
         raise ValueError(f"Dataset {dataset_name} not found in DATASET_CONFIG")
 
-    # Load feature dictionary
+
     # 加载特征字典
+    # DATASET_CONFIG 是工程自己的一些默认配置 没有用到
     dataset_config = dataset_config or DATASET_CONFIG[dataset_name]
+    # YOutubeDNN data 下的 feature_dict 包含了所有特征的 vocab_size 等信息
     feature_dict = read_pkl_data(dataset_config["dict_path"])
 
     # 获取embedding维度
+    # YoutubeDNN 获取的是 EMB_DIM 配置项
     emb_dim = features_config.get("emb_dim", 8)
 
-    # 创建特征列
+    # 创建特征列 这是一个返回的 list
     feature_columns = []
+    # YoutubeDNN 获取了 model_config_dict["features"] 中定义的特征列表
     feature_definitions = features_config.get("features", [])
 
     # 获取序列最大长度
+    # YoutubeDNN 获取的是 MAX_SEQ_LEN 配置项
     max_seq_len = features_config.get("max_seq_len", 50)
     for feat_def in tqdm(feature_definitions, disable=not verbose):
         feature_name = feat_def["name"]
 
         # 确定特征类型和参数
+        # YoutubeDNN 的 cfg.features 的各元素中没有 type 字段
         explicit_type = feat_def.get("type")
 
         if feature_name == "hist_len":
@@ -320,6 +333,7 @@ def prepare_features(
                 max_len=feat_def.get("max_len", 1),
                 dtype=feat_def.get("dtype", "float32"),
             )
+        # YoutubeDNN 有两个 hist_movie_id 和 hist_genres
         elif explicit_type == "varlen_sparse" or (
             feature_name.startswith("hist_") and explicit_type is None
         ):
@@ -340,6 +354,8 @@ def prepare_features(
                     emb_dim=emb_dim,
                     vocab_size=feature_dict[feat_def.get("emb_name", feature_name)],
                     group=feat_def.get("group", []),
+
+                    # YoutubeDNN 后面几个参数是序列特有的
                     type="varlen_sparse",
                     max_len=feat_def.get("max_len", max_seq_len),
                     combiner=feat_def.get("combiner", "mean"),
@@ -371,13 +387,16 @@ def prepare_features(
 
     # 获取特征名称和任务名称
     feature_name_list = [fc.name for fc in feature_columns]
+    # YoutubeDNN 默认为 ["movie_id"]，即预测电影ID这个任务
     task_name_list = features_config.get("task_names", ["label"])
 
     # 特征变换
+    # YoutubeDNN 没有用到
     train_data_transformed = apply_feature_transformations(features_config, train_data)
     test_data_transformed = apply_feature_transformations(features_config, test_data)
 
     # DSIN会话特征构造
+    # YoutubeDNN 没有用到 DSIN 的会话特征构造逻辑
     dsin_cfg = features_config.get("dsin_session", None)
     if dsin_cfg:
         sess_max_count = dsin_cfg.get("sess_max_count", 5)
@@ -467,6 +486,7 @@ def prepare_features(
     }
 
     # 处理特定特征处理
+    # YoutubeDNN 有用到
     if "movie_id" in train_sample_dict and "genres" in train_sample_dict:
         movie_id_to_genre_id_dict = {
             movie_id: genre_id
@@ -495,6 +515,8 @@ def prepare_features(
         )
     else:
         all_item_model_input = None
+    
+    print("有没有 all_item_model_input", all_item_model_input is not None)
 
     processed_data = {
         "train": {"features": train_sample_dict, "labels": train_label_list},

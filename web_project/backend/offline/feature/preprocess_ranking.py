@@ -61,7 +61,7 @@ def process_features_for_ranking(df_movies, df_ratings, df_users):
     df_users = df_users[user_columns].copy()
     df_movies = df_movies[["movie_id", "genres", "isAdult", "startYear"]].copy()
     
-    # 处理类型 - 为简化精排取第一个类型
+    # TODO 处理类型 - 为简化精排取第一个类型（这是原来的做法）
     # (DeepFM 期望标量特征，而非序列)
     df_movies['genres'] = df_movies['genres'].str.split("|").str[0]
     df_movies['isAdult'] = df_movies['isAdult'].fillna(False)
@@ -87,12 +87,14 @@ def process_features_for_ranking(df_movies, df_ratings, df_users):
     for feat_name in movie_sparse_feature_columns:
         label_encoder = LabelEncoder()
         # 处理潜在的 NaN 值
-        df_movies[feat_name] = df_movies[feat_name].fillna("unknown" if df_movies[feat_name].dtype == object else 0)
+        df_movies[feat_name] = df_movies[feat_name].fillna("unknown" if df_movies[feat_name].dtype == object else 0) # 看这一列的类型，如果是 object 就填充 "unknown"，否则填充 0
         df_movies[feat_name + "_encoded"] = label_encoder.fit_transform(df_movies[feat_name].astype(str)) + 1
         movie_vocab[feat_name] = label_encoder.classes_
     
     # 计算用户平均评分，用于生成标签
     print("计算用户平均评分...")
+    # 在 groupby 之后，分组字段会跑到“索引”位置，不再是普通列
+    # reset_index() 将分组字段重新变成普通列，方便后续 merge
     user_avg_ratings = df_ratings.groupby("user_id")["rating"].mean().reset_index()
     user_avg_ratings.columns = ["user_id", "user_avg_rating"]
     df_ratings = df_ratings.merge(user_avg_ratings, on="user_id", how="left")
@@ -228,13 +230,13 @@ def generate_negative_samples(
             if n_to_sample > 0:
                 sampled = user_hard_neg_pool.sample(
                     n=n_to_sample, 
-                    replace=len(user_hard_neg_pool) < n_to_sample
+                    replace=len(user_hard_neg_pool) < n_to_sample # 是否有放回采样
                 )
                 hard_neg_list.append(sampled)
                 hard_neg_count += len(sampled)
         
         if hard_neg_list:
-            hard_neg_df = pd.concat(hard_neg_list, ignore_index=True)
+            hard_neg_df = pd.concat(hard_neg_list, ignore_index=True) # ignore_index 会重排索引
             hard_neg_df["is_click"] = 0
             negative_samples.append(hard_neg_df)
             print(f"    添加了 {hard_neg_count} 个困难负样本")

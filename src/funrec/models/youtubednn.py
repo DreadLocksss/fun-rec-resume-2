@@ -10,9 +10,13 @@ from .layers import DNNs, SampledSoftmaxLayer, L2NormalizeLayer, SqueezeLayer
 
 def build_youtubednn_model(feature_columns, model_config):
     # 从model_config中提取参数
+    # YoutubeDNN 这里是 EMB_DIM
     emb_dim = model_config.get("emb_dim", 16)
+    # YoutubeDNN 这里是 NEG_SAMPLE_SIZE
     neg_sample = model_config.get("neg_sample", 20)
+    # YoutubeDNN 这里是 [64, 32]
     dnn_units = model_config.get("dnn_units", [32])
+    # YoutubeDNN 这里是 movie_id
     label_name = model_config.get("label_name", "movie_id")
 
     input_layer_dict = build_input_layer(feature_columns)
@@ -28,6 +32,7 @@ def build_youtubednn_model(feature_columns, model_config):
     user_feature_embedding = concat_group_embedding(
         group_embedding_feature_dict, "user_dnn"
     )  # B x (D * N)
+    # YoutubeDNN 没用到
     if "raw_hist_seq" in group_embedding_feature_dict:
         hist_seq_embedding = concat_group_embedding(
             group_embedding_feature_dict, "raw_hist_seq"

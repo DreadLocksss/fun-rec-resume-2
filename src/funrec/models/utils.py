@@ -32,6 +32,7 @@ def build_input_layer(feature_columns, prefix=""):
                     shape=(fc.dimension,), name=prefix + fc.name, dtype=fc.dtype
                 )
         else:
+            # YoutubeDNN hist_movie_id hist_genres 的 type 是 varlen_sparse
             input_layer_dict[fc.name] = Input(
                 shape=(fc.max_len,), name=prefix + fc.name, dtype=fc.dtype
             )
@@ -42,6 +43,9 @@ def build_embedding_table_dict(feature_columns, prefix=""):
     embedding_table_dict = OrderedDict()
     for fc in feature_columns:
         if fc.type in ["sparse", "varlen_sparse"]:
+            # TODO codex 说这里有坑
+            # 因为在 model_config_dict 那里 movie_id 先出现，所以 mask_zero = False
+            # 这样子可能会对 hist_movie_id_list 这种 varlen_sparse 特征的 embedding 产生影响，因为它们的输入序列中会有0作为padding
             mask_zero = True if fc.type == "varlen_sparse" else False
             if isinstance(fc.emb_name, str) and fc.emb_name not in embedding_table_dict:
                 embedding_table_dict[fc.emb_name] = Embedding(
@@ -53,6 +57,7 @@ def build_embedding_table_dict(feature_columns, prefix=""):
                     trainable=fc.trainable,
                     mask_zero=mask_zero,
                 )
+            # YoutubeDNN 用不到
             elif isinstance(fc.emb_name, list):
                 for emb_name in fc.emb_name:
                     if emb_name not in embedding_table_dict:
@@ -131,6 +136,7 @@ def build_group_feature_embedding_table_dict(
 
                 # Initialize group if it doesn't exist and we have combiners that need list structure
                 # Only apply mean combiner to non-sequence groups (not din_sequence, dien_sequence, mha, etc.)
+                # YoutubeDNN 满足
                 if (
                     ("mean" in fc.combiner)
                     and (group_name not in group_embedding_feature_dict)
@@ -138,6 +144,7 @@ def build_group_feature_embedding_table_dict(
                 ):
                     group_embedding_feature_dict[group_name] = []
 
+                # YoutubeDNN 满足
                 if ("mean" in fc.combiner) and ("_sequence" not in group_name):
                     pooling_emb = SequenceMeanPoolingLayer(keep_shape=True)(
                         embed_list

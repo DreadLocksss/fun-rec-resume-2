@@ -91,6 +91,7 @@ def evaluate_model(
         return metrics
 
     else:
+        # YoutubeDNN 没有
         if is_external_embedding:
             # 基于三方embedding库构建的模型评估 (例如：Item2Vec)
             external_model = models[0]
@@ -342,6 +343,7 @@ def evaluate_model(
                         "movie_id": np.array(list(range(feature_dict["movie_id"])))
                     }
                     # 添加其他物品特征，如果可用
+                    # YoutubeDNN 没有用到 因为 cfg.features 中没有指定 name = genres 的
                     if "genres" in test_features:
                         # 使用映射，如果可用
                         movie_id_to_genre_id_dict = {}

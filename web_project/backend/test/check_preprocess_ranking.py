@@ -1,18 +1,29 @@
 from __future__ import annotations
 
-import json
 import pickle
+import sys
 import warnings
 from pathlib import Path
 import pandas as pd
 
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "processed_data" / "web_project"
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+try:
+    from offline.config import config
+
+    DATA_DIR = config.TEMP_DIR
+except Exception:
+    DATA_DIR = BACKEND_DIR.parent / "data" / "processed_data" / "web_project"
+
 OUTPUT_DIR = DATA_DIR / "csv_exports"
 PKL_FILES = (
-    "train_eval_sample_final.pkl",
-    "feature_dict.pkl",
-    "vocab_dict.pkl",
+    "ranking_train_eval_sample.pkl",
+    "ranking_feature_dict.pkl",
+    "ranking_vocab_dict.pkl",
 )
 
 
@@ -32,21 +43,7 @@ def save_csv(df: pd.DataFrame, output_path: Path) -> None:
     df.to_csv(output_path, index=False, encoding="utf-8-sig")
 
 
-def normalize_split_data(split_data: dict[str, object]) -> dict[str, object]:
-    normalized: dict[str, object] = {}
-    for key, value in split_data.items():
-        ndim = getattr(value, "ndim", None)
-        if ndim == 1:
-            normalized[key] = value
-            continue
-        if ndim and ndim > 1:
-            normalized[key] = [json.dumps(row.tolist(), ensure_ascii=False) for row in value]
-            continue
-        normalized[key] = value
-    return normalized
-
-
-def export_train_eval_sample_final(path: Path) -> list[Path]:
+def export_ranking_train_eval_sample(path: Path) -> list[Path]:
     data = load_pickle(path)
     if not isinstance(data, dict):
         raise TypeError(f"{path.name} should be a dict, got {type(data)!r}")
@@ -59,7 +56,7 @@ def export_train_eval_sample_final(path: Path) -> list[Path]:
             )
 
         output_path = OUTPUT_DIR / f"{path.stem}_{split_name}.csv"
-        save_csv(pd.DataFrame(normalize_split_data(split_data)), output_path)
+        save_csv(pd.DataFrame(split_data), output_path)
         exported_paths.append(output_path)
     return exported_paths
 
@@ -91,11 +88,11 @@ def export_vocab_dict(path: Path) -> list[Path]:
 
 
 def export_pickle_to_csv(path: Path) -> list[Path]:
-    if path.name == "train_eval_sample_final.pkl":
-        return export_train_eval_sample_final(path)
-    if path.name == "feature_dict.pkl":
+    if path.name == "ranking_train_eval_sample.pkl":
+        return export_ranking_train_eval_sample(path)
+    if path.name == "ranking_feature_dict.pkl":
         return export_feature_dict(path)
-    if path.name == "vocab_dict.pkl":
+    if path.name == "ranking_vocab_dict.pkl":
         return export_vocab_dict(path)
     raise ValueError(f"Unsupported pickle file: {path.name}")
 

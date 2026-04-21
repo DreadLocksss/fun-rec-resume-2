@@ -65,6 +65,7 @@ def run_retrieval_training():
             "task_names": ["movie_id"],
             "features": [
                 # 用户特征
+                # name group vocab_size
                 {"name": "user_id", "group": ["user_dnn"], "vocab_size": feature_dict["user_id"]},
                 {"name": "age", "group": ["user_dnn"], "vocab_size": feature_dict["age"]},
                 {"name": "gender", "group": ["user_dnn"], "vocab_size": feature_dict["gender"]},
@@ -72,9 +73,11 @@ def run_retrieval_training():
                 {"name": "zip_code", "group": ["user_dnn"], "vocab_size": feature_dict["zip_code"]},
                 
                 # 物品特征 (目标)
+                # name group vocab_size
                 {"name": "movie_id", "group": ["target_item"], "vocab_size": feature_dict["movie_id"]},
                 
                 # 历史特征
+                # name group vocab_size emb_name combiner 
                 {
                     "name": "hist_movie_id", 
                     "emb_name": "movie_id", 
@@ -137,6 +140,7 @@ def run_retrieval_training():
     
     # 评估
     metrics = evaluate_model(models, processed_data, cfg.evaluation, feature_columns)
+    print("现在开始 build 评估指标表格")
     print(build_metrics_table(metrics))
     
     # 保存模型

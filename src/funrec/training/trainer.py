@@ -52,6 +52,7 @@ def train_model(
     module = importlib.import_module(module_path)
     build_function = getattr(module, function_name)
 
+    # YoutubeDNN 没有用到
     if is_classical:
         # 经典模型：直接构建和拟合
         model = build_function(feature_columns, model_params)
@@ -89,7 +90,8 @@ def train_model(
 
         # 返回模型和None作为用户和物品模型（经典模型）
         return model, None, None
-
+    
+    # YoutubeDNN 没有用到
     elif is_external_embedding:
         # 外部嵌入模型（例如Item2Vec）从用户历史序列训练
         # 使用自己的参数签名构建模型
@@ -147,10 +149,15 @@ def train_model(
         model, user_model, item_model = build_function(feature_columns, model_params)
 
         # 编译模型
+        # YoutubeDNN 为 adam
         optimizer_name = training_config.get("optimizer", "adam")
+        # YoutubeDNN 为 {"learning_rate": config.LEARNING_RATE}
         optimizer_params = training_config.get("optimizer_params", {})
+        # YoutubeDNN 用 sampledsoftmaxloss
         loss = training_config.get("loss", ["binary_crossentropy"])
+        # YoutubeDNN 为 None
         loss_weights = training_config.get("loss_weights", None)
+        # YoutubeDNN 为 ["binary_accuracy"]
         metrics = training_config.get("metrics", ["binary_accuracy"])
 
         # 处理自定义损失函数
@@ -171,7 +178,7 @@ def train_model(
                 )
             else:
                 optimizer = (
-                    tf.keras.optimizers.Adam(**optimizer_params)
+                    tf.keras.optimizers.Adam(**optimizer_params) # 字典解包为函数命名参数
                     if optimizer_params
                     else tf.keras.optimizers.Adam()
                 )
@@ -185,9 +192,13 @@ def train_model(
         model.compile(**compile_kwargs)
 
         # 获取训练参数
+        # YoutubeDNN 为 BATCH_SIZE
         batch_size = training_config.get("batch_size", 1024)
+        # YoutubeDNN 为 EPOCHS
         epochs = training_config.get("epochs", 1)
+        # YoutubeDNN 为 0.2
         validation_split = training_config.get("validation_split", 0.2)
+        # YoutubeDNN 为 1
         verbose = training_config.get("verbose", 0)
 
         # 基于配置应用训练特定的预处理
@@ -211,6 +222,7 @@ def train_model(
             labels_for_fit = labels_for_fit[0]
 
         # 处理多输出模型：如果模型有多个输出但只有一个标签集，复制标签
+        # YoutubeDNN 应该只有一个 loss
         if (
             isinstance(loss, list)
             and len(loss) > 1

@@ -444,6 +444,7 @@ class SequenceMeanPoolingLayer(tf.keras.layers.Layer):
             mask = tf.expand_dims(mask, axis=-1)  # (batch_size, seq_len, 1)
             inputs *= mask
 
+        # 没有 mask 取序列本身的长度 seq_len
         valid_len = tf.reduce_sum(mask, axis=1, keepdims=False) if mask is not None else tf.shape(inputs)[1]
         valid_len = tf.cast(valid_len, dtype=tf.float32)
         output = tf.reduce_sum(inputs, axis=1) / (valid_len + self.eps)
